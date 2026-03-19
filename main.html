@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SessionVault | Pro Parser</title>
+    
+    <!-- EXTERNAL HEAVY LIBRARIES -->
+    <!-- 1. Buffer: Node.js Buffer polyfill for binary handling -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/buffer/6.0.3/buffer.min.js"></script>
+    <!-- 2. Pako: High speed compression/decompression (Zlib) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pako/2.1.0/pako.min.js"></script>
+
+    <style>
+        :root {
+            --bg-primary: #020817;
+            --bg-secondary: #0f172a;
+            --bg-card: #1e293b;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --accent-hover: #2563eb;
+            --border: #334155;
+            --radius: 0.75rem;
+            --shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1);
+            --font-mono: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; }
+        
+        body {
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            width: 100%;
+        }
+
+        /* --- HEADER --- */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .logo {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-size: 1.5rem;
+            font-weight: 700;
+            background: linear-gradient(to right, #3b82f6, #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        /* --- UPLOAD ZONE --- */
+        .upload-zone {
+            border: 2px dashed var(--border);
+            border-radius: var(--radius);
+            padding: 4rem 2rem;
+            text-align: center;
+            background-color: rgba(30, 41, 59, 0.3);
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            cursor: pointer;
+            margin-bottom: 2rem;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .upload-zone:hover, .upload-zone.dragover {
+            border-color: var(--accent);
+            background-color: rgba(59, 130, 246, 0.1);
+            transform: translateY(-2px);
+            box-shadow: var(--shadow);
+        }
+
+        .upload-icon {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 1.5rem;
+            color: var(--text-secondary);
+            transition: color 0.3s;
+        }
+
+        .upload-zone:hover .upload-icon { color: var(--accent); }
+
+        /* --- STATS BAR --- */
+        .stats-bar {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+        }
+
+        .stat-item {
+            background-color: var(--bg-card);
+            border: 1px solid var(--border);
+            padding: 0.75rem 1.25rem;
+            border-radius: var(--radius);
+            display: flex;
+            flex-direction: column;
+            min-width: 140px;
+        }
+
+        .stat-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; }
+        .stat-value { font-size: 1.25rem; font-weight: 600; color: var(--text-primary); }
+
+        /* --- TERMINAL OUTPUT --- */
+        .terminal-window {
+            background-color: #0d1117;
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            overflow: hidden;
+            display: none; /* Hidden initially */
+            flex-direction: column;
+            height: 600px;
+        }
+
+        .terminal-header {
+            background-color: var(--bg-card);
+            padding: 0.75rem 1rem;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .terminal-dots { display: flex; gap: 6px; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; }
+        .dot.red { background-color: #ef4444; }
+        .dot.yellow { background-color: #f59e0b; }
+        .dot.green { background-color: #22c55e; }
+
+        .terminal-actions { display: flex; gap: 0.5rem; }
+
+        .terminal-body {
+            flex: 1;
+            padding: 1rem;
+            overflow-y: auto;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+            line-height: 1.6;
+            color: #e6edf3;
+        }
+
+        .log-entry { margin-bottom: 0.5rem; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 0.25rem; }
+        .log-key { color: #79c0ff; font-weight: 600; }
+        .log-val { color: #a5d6ff; }
+        .log-meta { color: #8b949e; font-size: 0.75rem; }
+
+        /* --- BUTTONS --- */
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 500;
+            font-size: 0.85rem;
+            cursor: pointer;
+            border: 1px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .btn-primary { background-color: var(--accent); color: white; }
+        .btn-primary:hover { background-color: var(--accent-hover); }
+        .btn-ghost { background-color: transparent; color: var(--text-secondary); border-color: var(--border); }
+        .btn-ghost:hover { background-color: var(--bg-card); color: var(--text-primary); }
+
+        /* --- UTILS --- */
+        .hidden { display: none !important; }
+        
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar { width: 8px; height: 8px; }
+        ::-webkit-scrollbar-track { background: var(--bg-primary); }
+        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <div class="logo">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                SessionVault Pro
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem; font-size: 0.8rem; color: var(--text-secondary);">
+                <span class="dot green" style="width: 8px; height: 8px;"></span>
+                Libraries Loaded: Buffer, Pako
+            </div>
+        </header>
+
+        <!-- UPLOAD SECTION -->
+        <div class="upload-zone" id="drop-zone">
+            <input type="file" id="file-input" accept=".ldb" style="display: none;">
+            <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" x2="12" y1="3" y2="15"/></svg>
+            <h3 style="margin-bottom: 0.5rem; font-size: 1.25rem;">Load LevelDB File</h3>
+            <p style="color: var(--text-secondary); margin-bottom: 1.5rem; max-width: 400px; margin-left: auto; margin-right: auto;">
+                Drag & drop your <code>.ldb</code> file here. The parser will use binary block reading to extract keys and values.
+            </p>
+            <button class="btn btn-primary" onclick="document.getElementById('file-input').click()">Select File</button>
+        </div>
+
+        <!-- STATS -->
+        <div class="stats-bar hidden" id="stats-bar">
+            <div class="stat-item">
+                <span class="stat-label">File Size</span>
+                <span class="stat-value" id="stat-size">0 KB</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Keys Found</span>
+                <span class="stat-value" id="stat-keys">0</span>
+            </div>
+            <div class="stat-item">
+                <span class="stat-label">Format</span>
+                <span class="stat-value">LevelDB (SSTable)</span>
+            </div>
+        </div>
+
+        <!-- TERMINAL OUTPUT -->
+        <div class="terminal-window" id="terminal-window">
+            <div class="terminal-header">
+                <div class="terminal-dots">
+                    <div class="dot red"></div>
+                    <div class="dot yellow"></div>
+                    <div class="dot green"></div>
+                </div>
+                <div style="font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-secondary);">output.log</div>
+                <div class="terminal-actions">
+                    <button class="btn btn-ghost" onclick="copyOutput()">Copy</button>
+                    <button class="btn btn-ghost" onclick="clearOutput()">Clear</button>
+                </div>
+            </div>
+            <div class="terminal-body" id="terminal-body">
+                <!-- Content goes here -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- GLOBAL STATE ---
+        const dropZone = document.getElementById('drop-zone');
+        const fileInput = document.getElementById('file-input');
+        const terminalWindow = document.getElementById('terminal-window');
+        const terminalBody = document.getElementById('terminal-body');
+        const statsBar = document.getElementById('stats-bar');
+        
+        // --- DRAG & DROP HANDLERS ---
+        const events = ['dragenter', 'dragover', 'dragleave', 'drop'];
+        events.forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+        });
+
+        dropZone.addEventListener('drop', handleDrop, false);
+        fileInput.addEventListener('change', (e) => handleFiles(e.target.files), false);
+
+        function handleDrop(e) {
+            const dt = e.dataTransfer;
+            handleFiles(dt.files);
+        }
+
+        function handleFiles(files) {
+            if (files.length === 0) return;
+            const file = files[0];
+            
+            // UI Updates
+            document.getElementById('stat-size').textContent = (file.size / 1024).toFixed(2) + ' KB';
+            statsBar.classList.remove('hidden');
+            terminalWindow.style.display = 'flex';
+            terminalBody.innerHTML = '<div style="color: #8b949e;">Initializing parser...</div>';
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                // Use Buffer library (loaded from CDN) to handle binary data
+                const buffer = Buffer.from(e.target.result);
+                parseLDB(buffer);
+            };
+            
+            reader.readAsArrayBuffer(file);
+        }
+
+        // --- CORE PARSING LOGIC ---
+        function parseLDB(buffer) {
+            terminalBody.innerHTML = ''; // Clear loading message
+            let keysFound = 0;
+
+            // LevelDB files are composed of blocks. 
+            // We will scan the buffer for sequences of readable text that look like keys/values.
+            // This is a heuristic scan because full SSTable parsing requires strict block traversal.
+            
+            const length = buffer.length;
+            const minStringLen = 5;
+            let currentString = "";
+            let entries = [];
+
+            // Scan byte by byte
+            for (let i = 0; i < length; i++) {
+                const byte = buffer[i];
+
+                // Check for printable ASCII (32-126) or Tab/Newline
+                if ((byte >= 32 && byte <= 126) || byte === 9 || byte === 10 || byte === 13) {
+                    currentString += String.fromCharCode(byte);
+                } else {
+                    // End of string detected
+                    if (currentString.length >= minStringLen) {
+                        // Filter out common garbage
+                        if (!isGarbage(currentString)) {
+                            entries.push({
+                                offset: i - currentString.length,
+                                text: currentString
+                            });
+                            keysFound++;
+                        }
+                    }
+                    currentString = "";
+                }
+            }
+
+            // Render Results
+            renderEntries(entries);
+            document.getElementById('stat-keys').textContent = keysFound;
+        }
+
+        function isGarbage(str) {
+            // Heuristics to filter out binary noise that happens to be printable
+            if (str.length > 200) return true; // Too long to be a simple key/value
+            if (/^[\x00-\x1F]*$/.test(str)) return true; // Control chars
+            return false;
+        }
+
+        function renderEntries(entries) {
+            const fragment = document.createDocumentFragment();
+            
+            // Limit to first 500 entries for performance
+            const displayLimit = 500;
+            const count = Math.min(entries.length, displayLimit);
+
+            for (let i = 0; i < count; i++) {
+                const entry = entries[i];
+                const div = document.createElement('div');
+                div.className = 'log-entry';
+                
+                // Try to detect if it looks like a URL or Cookie
+                let typeClass = 'log-val';
+                if (entry.text.includes('http')) typeClass = 'log-key'; // Highlight URLs
+                if (entry.text.includes('cookie') || entry.text.includes('session')) typeClass = 'log-key';
+
+                div.innerHTML = `
+                    <div class="${typeClass}">${escapeHtml(entry.text)}</div>
+                    <div class="log-meta">Offset: 0x${entry.offset.toString(16).toUpperCase()}</div>
+                `;
+                fragment.appendChild(div);
+            }
+
+            if (entries.length > displayLimit) {
+                const more = document.createElement('div');
+                more.style.color = '#f59e0b';
+                more.style.padding = '1rem';
+                more.textContent = `... and ${entries.length - displayLimit} more entries hidden for performance.`;
+                fragment.appendChild(more);
+            }
+
+            terminalBody.appendChild(fragment);
+        }
+
+        function escapeHtml(text) {
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
+        }
+
+        function copyOutput() {
+            const text = terminalBody.innerText;
+            navigator.clipboard.writeText(text).then(() => {
+                alert('Copied to clipboard');
+            });
+        }
+
+        function clearOutput() {
+            terminalBody.innerHTML = '';
+            statsBar.classList.add('hidden');
+            terminalWindow.style.display = 'none';
+            fileInput.value = '';
+        }
+    </script>
+</body>
+</html>
