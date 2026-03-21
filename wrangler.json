@@ -1,6 +1,7 @@
 {
   "name": "cooli",
   "version": "1.0.0",
+  "compatibility_date":"2026-03-21",
   "description": "LevelDB Parser running on Cloudflare Workers",
   "main": "src/index.js",
   "scripts": {
