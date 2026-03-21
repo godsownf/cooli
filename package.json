@@ -1,7 +1,8 @@
 {
   "name": "cooli",
   "private": true,
-  "version": "0.0.0",
+  "compatibility_date":"2026-03-21",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
