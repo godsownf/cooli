@@ -25,7 +25,8 @@ jobs:
           cache: "npm"
 
       - name: Install Dependencies
-        run: npm ci
+        run: npm install lucide-react clsx tailwind-merge class-variance-authority
+
 
       - name: Build
-        run: npm run build
+        run: npm run dev
